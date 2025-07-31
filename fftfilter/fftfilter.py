@@ -164,6 +164,8 @@ class MainWindow(QMainWindow):
 		actionmenu.addAction(QQ(QAction, parent=self, text="&Save Figure", tooltip="Save the figure", change=lambda x: self.savefigure()))
 		actionmenu.addSeparator()
 		actionmenu.addAction(QQ(QAction, parent=self, text="&Set Highpass Order", change=lambda _: self.change_highpass_order()))
+		actionmenu.addSeparator()
+		actionmenu.addAction(QQ(QAction, parent=self, text="&Apply to all", change=lambda _: self.apply_to_all()))
 
 	def gui(self):
 		self.gui_menu()
@@ -234,8 +236,8 @@ class MainWindow(QMainWindow):
 		column_index = 0
 		
 		prev_button = QQ(QPushButton, text='Previous', change=lambda: self.update_selected_file(self.fileindex-1), shortcut='a')
-		next_button = QQ(QPushButton, text='Next', change=lambda: self.update_selected_file(self.fileindex+1), shortcut='s')
-		save_button = QQ(QPushButton, text='Save', change=lambda: self.save_file(), shortcut='d')
+		next_button = QQ(QPushButton, text='Next', change=lambda: self.update_selected_file(self.fileindex+1), shortcut='d')
+		save_button = QQ(QPushButton, text='Save', change=lambda: self.save_file(), shortcut='s')
 
 
 		button_layout.addWidget(prev_button, row_index, column_index)
@@ -449,6 +451,43 @@ class MainWindow(QMainWindow):
 			self.redrawplot.emit()
 		except BreakpointError as E:
 			pass
+
+	def apply_to_all(self):
+		cutoff_freq = config['cutoff_freq']
+		highpass = config['highpass']
+		
+		for fname in self.files:
+			data = np.genfromtxt(fname, delimiter="\t")
+			xs = data[:, 0]
+			ys = data[:, 1]
+			
+			N = len(xs)
+			
+			fft_ys = scipy.fftpack.rfft(ys)
+			fft_xs = scipy.fftpack.rfftfreq(N, xs[1]-xs[0])
+			
+			if highpass:
+				filter_ys = high_pass_filter(fft_xs, cutoff_freq, highpass)
+				fft_cut = fft_ys * filter_ys
+				fft_bas = fft_ys * (1-filter_ys)
+			else:
+				filter_ys = fft_xs > cutoff_freq
+				fft_cut = np.where(filter_ys, fft_ys, 0)
+				fft_bas = np.where(~filter_ys, fft_ys, 0)
+			
+			ys_corr = scipy.fftpack.irfft(fft_cut)
+			ys_base = scipy.fftpack.irfft(fft_bas)
+			
+			###
+			basename, _ = os.path.splitext(fname)
+			savename = basename + '.datfft'
+
+			# @Luis: Directly take corrected xs here
+			data = np.vstack((xs, ys_corr)).T
+			
+			np.savetxt(savename, data, **self.config["savefile_kwargs"])
+		
+		self.notification(f"Saved data successfully for {len(self.files)} files.")
 
 class Config(dict):
 	def __init__(self, signal, init_values={}):
