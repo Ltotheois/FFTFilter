@@ -278,7 +278,7 @@ class MainWindow(QMainWindow):
 			self.notification("No files were selected. Keeping current data.")
 			return
 		
-		self.files = fnames
+		self.files = sorted(fnames)
 		self.update_selected_file()
 
 		
@@ -678,6 +678,7 @@ def start():
 	
 	if args.files:
 		files = [ file for glob_str in args.files for file in glob.glob(glob_str, recursive=True) ]
+		files = sorted(files)
 		kwargs['files'] = files
 	else:
 		kwargs['files'] = []
